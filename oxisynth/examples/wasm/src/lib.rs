@@ -5,6 +5,7 @@ use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
 use cpal::Stream;
 use oxisynth::MidiEvent;
 use std::sync::mpsc::{Receiver, Sender};
+use std::io::Cursor;
 
 // This is like the `main` function, except for JavaScript.
 #[wasm_bindgen(start)]
@@ -38,7 +39,12 @@ pub fn noteOn(h: &mut Handle, note: i32) {
 }
 
 #[wasm_bindgen]
-pub fn beep() -> Handle {
+pub fn noteOff(h: &mut Handle, note: i32) {
+    h.note_off(0, note as _);
+}
+
+#[wasm_bindgen]
+pub fn beep(soundFontData: Vec<u8>) -> Handle {
     let host = cpal::default_host();
     let device = host
         .default_output_device()
@@ -48,16 +54,16 @@ pub fn beep() -> Handle {
     let (tx, rx) = std::sync::mpsc::channel::<MidiEvent>();
     Handle(
         match config.sample_format() {
-            cpal::SampleFormat::F32 => run::<f32>(&device, &config.into(), rx),
-            cpal::SampleFormat::I16 => run::<i16>(&device, &config.into(), rx),
-            cpal::SampleFormat::U16 => run::<u16>(&device, &config.into(), rx),
+            cpal::SampleFormat::F32 => run::<f32>(soundFontData, &device, &config.into(), rx),
+            cpal::SampleFormat::I16 => run::<i16>(soundFontData, &device, &config.into(), rx),
+            cpal::SampleFormat::U16 => run::<u16>(soundFontData, &device, &config.into(), rx),
             _ => panic!("unsupported sample format"),
         },
         tx,
     )
 }
 
-fn run<T>(device: &cpal::Device, config: &cpal::StreamConfig, rx: Receiver<MidiEvent>) -> Stream
+fn run<T>(soundFontData: Vec<u8>, device: &cpal::Device, config: &cpal::StreamConfig, rx: Receiver<MidiEvent>) -> Stream
 where
     T: cpal::Sample + cpal::SizedSample + cpal::FromSample<f32>,
 {
@@ -73,10 +79,8 @@ where
 
         let mut synth = oxisynth::Synth::new(settings).unwrap();
 
-        // Load from memory
-        use std::io::Cursor;
-        let mut file = Cursor::new(include_bytes!("../../../../testdata/Boomwhacker.sf2"));
-        let font = oxisynth::SoundFont::load(&mut file).unwrap();
+        let mut soundFontCursor = Cursor::new(soundFontData);
+        let font = oxisynth::SoundFont::load(&mut soundFontCursor).unwrap();
 
         synth.add_font(font, true);
         synth.set_sample_rate(sample_rate);
