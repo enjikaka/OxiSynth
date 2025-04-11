@@ -19,7 +19,7 @@ import("./pkg")
       const fileBuffer = await soundfontFile.arrayBuffer();
       const uint8Array = new Uint8Array(fileBuffer);
       
-      let handle = rust_module.beep(uint8Array);
+      let handle = rust_module.loadSoundFont(uint8Array);
 
       const notLoaded = document.getElementById("not-loaded");
       const loaded = document.getElementById("loaded");

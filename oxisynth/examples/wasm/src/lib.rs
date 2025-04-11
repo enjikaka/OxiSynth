@@ -19,32 +19,70 @@ pub fn main_js() -> Result<(), JsValue> {
 }
 
 #[wasm_bindgen]
+#[allow(dead_code)]
 pub struct Handle(Stream, Sender<MidiEvent>);
 
 impl Handle {
-    fn note_on(&mut self, channel: u8, key: u8, vel: u8) {
-        self.1.send(MidiEvent::NoteOn { channel, key, vel }).ok();
+    fn note_on(&mut self, channel: u8, note: u8, velocity: u8) {
+        self.1.send(MidiEvent::NoteOn { channel, key: note, vel: velocity }).ok();
     }
-    fn note_off(&mut self, channel: u8, key: u8) {
-        self.1.send(MidiEvent::NoteOff { channel, key }).ok();
+    fn note_off(&mut self, channel: u8, note: u8) {
+        self.1.send(MidiEvent::NoteOff { channel, key: note }).ok();
+    }
+    fn program_change(&mut self, channel: u8, program_id: u8) {
+        self.1.send(MidiEvent::ProgramChange { channel, program_id }).ok();
+    }
+    fn control_change(&mut self, channel: u8, control: u8, value: u8) {
+        self.1.send(MidiEvent::ControlChange { channel, ctrl: control, value }).ok();
+    }
+    fn all_notes_off(&mut self, channel: u8) {
+        self.1.send(MidiEvent::AllNotesOff { channel }).ok();
+    }
+    fn all_sounds_off(&mut self, channel: u8) {
+        self.1.send(MidiEvent::AllSoundOff { channel }).ok();
+    }
+    fn pitch_bend(&mut self, channel: u8, value: u16) {
+        self.1.send(MidiEvent::PitchBend { channel, value }).ok();
     }
 }
 
 #[wasm_bindgen]
-pub struct Synth(oxisynth::Synth);
-
-#[wasm_bindgen]
-pub fn noteOn(h: &mut Handle, note: i32) {
-    h.note_on(0, note as _, 100);
+pub fn note_on(h: &mut Handle, channel: i32, note: i32, velocity: i32) {
+    h.note_on(channel as _, note as _, velocity as _);
 }
 
 #[wasm_bindgen]
-pub fn noteOff(h: &mut Handle, note: i32) {
-    h.note_off(0, note as _);
+pub fn note_off(h: &mut Handle, channel: i32, note: i32) {
+    h.note_off(channel as _, note as _);
 }
 
 #[wasm_bindgen]
-pub fn beep(soundFontData: Vec<u8>) -> Handle {
+pub fn program_change(h: &mut Handle, channel: i32, program_id: i32) {
+    h.program_change(channel as _, program_id as _);
+}
+
+#[wasm_bindgen] 
+pub fn control_change(h: &mut Handle, channel: i32, control: i32, value: i32) {
+    h.control_change(channel as _, control as _, value as _);
+}
+
+#[wasm_bindgen]
+pub fn all_notes_off(h: &mut Handle, channel: i32) {
+    h.all_notes_off(channel as _);
+}   
+
+#[wasm_bindgen]
+pub fn all_sounds_off(h: &mut Handle, channel: i32) {
+    h.all_sounds_off(channel as _);
+}
+
+#[wasm_bindgen]
+pub fn pitch_bend(h: &mut Handle, channel: i32, value: i32) {
+    h.pitch_bend(channel as _, value as _);
+}
+
+#[wasm_bindgen]
+pub fn load_sound_font(sound_font_data: Vec<u8>) -> Handle {
     let host = cpal::default_host();
     let device = host
         .default_output_device()
@@ -54,16 +92,16 @@ pub fn beep(soundFontData: Vec<u8>) -> Handle {
     let (tx, rx) = std::sync::mpsc::channel::<MidiEvent>();
     Handle(
         match config.sample_format() {
-            cpal::SampleFormat::F32 => run::<f32>(soundFontData, &device, &config.into(), rx),
-            cpal::SampleFormat::I16 => run::<i16>(soundFontData, &device, &config.into(), rx),
-            cpal::SampleFormat::U16 => run::<u16>(soundFontData, &device, &config.into(), rx),
+            cpal::SampleFormat::F32 => run::<f32>(sound_font_data, &device, &config.into(), rx),
+            cpal::SampleFormat::I16 => run::<i16>(sound_font_data, &device, &config.into(), rx),
+            cpal::SampleFormat::U16 => run::<u16>(sound_font_data, &device, &config.into(), rx),
             _ => panic!("unsupported sample format"),
         },
         tx,
     )
 }
 
-fn run<T>(soundFontData: Vec<u8>, device: &cpal::Device, config: &cpal::StreamConfig, rx: Receiver<MidiEvent>) -> Stream
+fn run<T>(sound_font_data: Vec<u8>, device: &cpal::Device, config: &cpal::StreamConfig, rx: Receiver<MidiEvent>) -> Stream
 where
     T: cpal::Sample + cpal::SizedSample + cpal::FromSample<f32>,
 {
@@ -79,8 +117,8 @@ where
 
         let mut synth = oxisynth::Synth::new(settings).unwrap();
 
-        let mut soundFontCursor = Cursor::new(soundFontData);
-        let font = oxisynth::SoundFont::load(&mut soundFontCursor).unwrap();
+        let mut sound_font_cursor = Cursor::new(sound_font_data);
+        let font = oxisynth::SoundFont::load(&mut sound_font_cursor).unwrap();
 
         synth.add_font(font, true);
         synth.set_sample_rate(sample_rate);
